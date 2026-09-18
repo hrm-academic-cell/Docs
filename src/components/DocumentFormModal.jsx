@@ -50,8 +50,8 @@ export default function DocumentFormModal({ open, onClose, onSaved, categories, 
       let fileSize = editingDoc?.file_size
 
       if (file) {
-        const safeName = file.name.replace(/[^\w.\-ก-๙]/g, '_')
-        const path = `${Date.now()}-${safeName}`
+        const ext = file.name.includes('.') ? file.name.split('.').pop().replace(/[^\w]/g, '') : ''
+        const path = `${Date.now()}-${crypto.randomUUID().slice(0, 8)}${ext ? '.' + ext : ''}`
         const { error: uploadError } = await supabase.storage
           .from(DOCS_BUCKET)
           .upload(path, file, { cacheControl: '3600', upsert: false })
