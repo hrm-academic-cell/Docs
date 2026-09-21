@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import DocumentCard from '../components/DocumentCard.jsx'
+import DocumentListItem from '../components/DocumentListItem.jsx'
 import CategoryTabBar from '../components/CategoryTabBar.jsx'
 import { buildCategoryTree, categoryAndDescendantIds, categoryPathLabel } from '../lib/categoryTree.js'
 
@@ -12,6 +13,7 @@ export default function PublicLibrary() {
 
   const [search, setSearch] = useState('')
   const [showSearch, setShowSearch] = useState(false)
+  const [viewMode, setViewMode] = useState('grid') // 'grid' | 'list'
 
   // null = ยังไม่ได้เลือกอะไร (แสดงหน้าต้อนรับ), 'all' = แสดงทั้งหมด, หรือ id ของหมวดหมู่หลัก
   const [activeMainId, setActiveMainId] = useState(null)
@@ -138,16 +140,63 @@ export default function PublicLibrary() {
         ) : filtered.length === 0 ? (
           <div className="text-center py-24 text-slate-400">ไม่พบเอกสารที่ตรงกับการค้นหา</div>
         ) : (
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filtered.map((doc) => (
-              <DocumentCard
-                key={doc.id}
-                doc={doc}
-                categoryLabel={categoryPathLabel(categories, doc.category_id)}
-                onDownloaded={handleDownloaded}
-              />
-            ))}
-          </div>
+          <>
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-sm text-slate-500">
+                พบ <span className="text-navy-900 font-medium">{filtered.length.toLocaleString('th-TH')}</span> เอกสาร
+              </p>
+              <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-full p-1">
+                <button
+                  onClick={() => setViewMode('grid')}
+                  aria-label="มุมมองแบบตาราง"
+                  title="มุมมองแบบตาราง"
+                  className={`w-8 h-8 rounded-full flex items-center justify-center text-sm transition-colors ${
+                    viewMode === 'grid'
+                      ? 'bg-gradient-to-r from-gold-500 to-gold-600 text-navy-950'
+                      : 'text-slate-400 hover:text-gold-600'
+                  }`}
+                >
+                  ▦
+                </button>
+                <button
+                  onClick={() => setViewMode('list')}
+                  aria-label="มุมมองแบบรายการ"
+                  title="มุมมองแบบรายการ"
+                  className={`w-8 h-8 rounded-full flex items-center justify-center text-sm transition-colors ${
+                    viewMode === 'list'
+                      ? 'bg-gradient-to-r from-gold-500 to-gold-600 text-navy-950'
+                      : 'text-slate-400 hover:text-gold-600'
+                  }`}
+                >
+                  ☰
+                </button>
+              </div>
+            </div>
+
+            {viewMode === 'grid' ? (
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {filtered.map((doc) => (
+                  <DocumentCard
+                    key={doc.id}
+                    doc={doc}
+                    categoryLabel={categoryPathLabel(categories, doc.category_id)}
+                    onDownloaded={handleDownloaded}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {filtered.map((doc) => (
+                  <DocumentListItem
+                    key={doc.id}
+                    doc={doc}
+                    categoryLabel={categoryPathLabel(categories, doc.category_id)}
+                    onDownloaded={handleDownloaded}
+                  />
+                ))}
+              </div>
+            )}
+          </>
         )}
       </main>
 
