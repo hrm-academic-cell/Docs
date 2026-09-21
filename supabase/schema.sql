@@ -16,9 +16,12 @@ create table if not exists public.categories (
   id           uuid primary key default uuid_generate_v4(),
   name         text not null unique,        -- ชื่อหมวดหมู่ เช่น "ประกาศ / คำสั่ง"
   slug         text not null unique,        -- ใช้สำหรับ filter ใน URL เช่น announcement
+  parent_id    uuid references public.categories(id) on delete cascade, -- null = หมวดหมู่หลัก
   sort_order   int not null default 0,
   created_at   timestamptz not null default now()
 );
+
+create index if not exists idx_categories_parent on public.categories(parent_id);
 
 -- ----------------------------------------------------------------------------
 -- 3. TABLE: documents

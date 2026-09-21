@@ -1,8 +1,9 @@
 import Swal from 'sweetalert2'
 import { supabase, DOCS_BUCKET } from '../lib/supabaseClient'
+import { categoryPathLabel } from '../lib/categoryTree'
 
 export default function DocumentTable({ documents, categories, onEdit, onChanged }) {
-  const categoryName = (id) => categories.find((c) => c.id === id)?.name ?? '—'
+  const categoryName = (id) => categoryPathLabel(categories, id) ?? '—'
 
   async function handleDelete(doc) {
     const result = await Swal.fire({

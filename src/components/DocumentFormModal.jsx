@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import Swal from 'sweetalert2'
 import { supabase, DOCS_BUCKET } from '../lib/supabaseClient'
+import { buildCategoryTree } from '../lib/categoryTree'
 
 const emptyForm = {
   title: '',
@@ -50,8 +51,10 @@ export default function DocumentFormModal({ open, onClose, onSaved, categories, 
       let fileSize = editingDoc?.file_size
 
       if (file) {
-        const safeName = file.name.replace(/[^\w.\-ก-๙]/g, '_')
-        const path = `${Date.now()}-${safeName}`
+        // Storage key ต้องเป็น ASCII เท่านั้น (ห้ามมีอักขระไทย/ช่องว่าง/สัญลักษณ์พิเศษ)
+        // ส่วนชื่อไฟล์จริงที่ผู้ใช้เห็น (ภาษาไทยได้ตามปกติ) จะถูกเก็บแยกไว้ใน fileName ด้านล่าง
+        const ext = file.name.includes('.') ? file.name.split('.').pop().replace(/[^\w]/g, '') : ''
+        const path = `${Date.now()}-${crypto.randomUUID().slice(0, 8)}${ext ? '.' + ext : ''}`
         const { error: uploadError } = await supabase.storage
           .from(DOCS_BUCKET)
           .upload(path, file, { cacheControl: '3600', upsert: false })
@@ -123,10 +126,15 @@ export default function DocumentFormModal({ open, onClose, onSaved, categories, 
               onChange={(e) => setForm({ ...form, category_id: e.target.value })}
             >
               <option value="">-- ไม่ระบุหมวดหมู่ --</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
+              {buildCategoryTree(categories).map((main) => (
+                <optgroup key={main.id} label={main.name}>
+                  <option value={main.id}>{main.name} (หมวดหมู่หลัก)</option>
+                  {main.children.map((sub) => (
+                    <option key={sub.id} value={sub.id}>
+                      &nbsp;&nbsp;↳ {sub.name}
+                    </option>
+                  ))}
+                </optgroup>
               ))}
             </select>
           </div>
