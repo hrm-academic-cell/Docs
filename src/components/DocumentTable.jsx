@@ -25,6 +25,11 @@ export default function DocumentTable({ documents, categories, onEdit, onChanged
     if (doc.file_path) {
       await supabase.storage.from(DOCS_BUCKET).remove([doc.file_path])
     }
+    if (doc.cover_image_path) {
+      await supabase.storage.from(DOCS_BUCKET).remove([doc.cover_image_path])
+    }
+    // หมายเหตุ: ไม่ลบ application_form_path ออกจาก storage เพราะไฟล์นี้อาจถูกอ้างอิง
+    // ("เลือกจากเอกสารที่มีอยู่") จากประกาศอื่นอยู่ด้วย
     Swal.fire({ icon: 'success', title: 'ลบเรียบร้อย', timer: 1000, showConfirmButton: false })
     onChanged()
   }

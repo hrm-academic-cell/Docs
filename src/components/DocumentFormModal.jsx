@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Swal from 'sweetalert2'
 import { supabase, DOCS_BUCKET } from '../lib/supabaseClient'
 import { buildCategoryTree } from '../lib/categoryTree'
+
+const MAX_COVER_DIMENSION = 780
 
 const emptyForm = {
   title: '',
@@ -11,10 +13,46 @@ const emptyForm = {
   is_published: true,
 }
 
-export default function DocumentFormModal({ open, onClose, onSaved, categories, editingDoc }) {
+function readImageDimensions(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file)
+    const img = new Image()
+    img.onload = () => {
+      URL.revokeObjectURL(url)
+      resolve({ width: img.naturalWidth, height: img.naturalHeight })
+    }
+    img.onerror = () => {
+      URL.revokeObjectURL(url)
+      reject(new Error('ไม่สามารถอ่านไฟล์รูปภาพนี้ได้'))
+    }
+    img.src = url
+  })
+}
+
+function safeUploadPath(originalName) {
+  const ext = originalName.includes('.') ? originalName.split('.').pop().replace(/[^\w]/g, '') : ''
+  return `${Date.now()}-${crypto.randomUUID().slice(0, 8)}${ext ? '.' + ext : ''}`
+}
+
+export default function DocumentFormModal({
+  open,
+  onClose,
+  onSaved,
+  categories,
+  editingDoc,
+  allDocuments = [],
+}) {
   const [form, setForm] = useState(emptyForm)
   const [file, setFile] = useState(null)
+  const [coverFile, setCoverFile] = useState(null)
+  const [appFormMode, setAppFormMode] = useState('keep') // 'keep' | 'none' | 'existing' | 'upload'
+  const [appFormDocId, setAppFormDocId] = useState('')
+  const [appFormFile, setAppFormFile] = useState(null)
   const [saving, setSaving] = useState(false)
+
+  const flatCategories = categories
+  const selectedCategory = flatCategories.find((c) => c.id === form.category_id)
+  const requiresCover = !!selectedCategory?.requires_cover_image
 
   useEffect(() => {
     if (editingDoc) {
@@ -29,7 +67,16 @@ export default function DocumentFormModal({ open, onClose, onSaved, categories, 
       setForm(emptyForm)
     }
     setFile(null)
+    setCoverFile(null)
+    setAppFormMode('keep')
+    setAppFormDocId('')
+    setAppFormFile(null)
   }, [editingDoc, open])
+
+  const otherDocuments = useMemo(
+    () => allDocuments.filter((d) => d.id !== editingDoc?.id),
+    [allDocuments, editingDoc]
+  )
 
   if (!open) return null
 
@@ -43,32 +90,96 @@ export default function DocumentFormModal({ open, onClose, onSaved, categories, 
       Swal.fire({ icon: 'warning', title: 'กรุณาเลือกไฟล์เอกสาร' })
       return
     }
+    if (requiresCover && !coverFile && !editingDoc?.cover_image_path) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'ต้องแนบรูปภาพประจำประกาศ',
+        text: 'หมวดหมู่นี้บังคับให้แนบรูปภาพประจำประกาศ (ขนาดไม่เกิน 780x780 px)',
+      })
+      return
+    }
+    if (appFormMode === 'existing' && !appFormDocId) {
+      Swal.fire({ icon: 'warning', title: 'กรุณาเลือกไฟล์ใบสมัครจากเอกสารที่มีอยู่' })
+      return
+    }
+    if (appFormMode === 'upload' && !appFormFile) {
+      Swal.fire({ icon: 'warning', title: 'กรุณาเลือกไฟล์ใบสมัครที่จะอัปโหลด' })
+      return
+    }
 
     setSaving(true)
     try {
+      // ตรวจสอบขนาดรูปภาพก่อนอัปโหลดจริง
+      if (coverFile) {
+        const { width, height } = await readImageDimensions(coverFile)
+        if (width > MAX_COVER_DIMENSION || height > MAX_COVER_DIMENSION) {
+          throw new Error(
+            `ขนาดรูปภาพต้องไม่เกิน ${MAX_COVER_DIMENSION}x${MAX_COVER_DIMENSION} px (ไฟล์นี้คือ ${width}x${height} px)`
+          )
+        }
+      }
+
+      // 1) ไฟล์เอกสารหลัก
       let filePath = editingDoc?.file_path
       let fileName = editingDoc?.file_name
       let fileSize = editingDoc?.file_size
 
       if (file) {
-        // Storage key ต้องเป็น ASCII เท่านั้น (ห้ามมีอักขระไทย/ช่องว่าง/สัญลักษณ์พิเศษ)
-        // ส่วนชื่อไฟล์จริงที่ผู้ใช้เห็น (ภาษาไทยได้ตามปกติ) จะถูกเก็บแยกไว้ใน fileName ด้านล่าง
-        const ext = file.name.includes('.') ? file.name.split('.').pop().replace(/[^\w]/g, '') : ''
-        const path = `${Date.now()}-${crypto.randomUUID().slice(0, 8)}${ext ? '.' + ext : ''}`
+        const path = safeUploadPath(file.name)
         const { error: uploadError } = await supabase.storage
           .from(DOCS_BUCKET)
           .upload(path, file, { cacheControl: '3600', upsert: false })
         if (uploadError) throw uploadError
 
-        // ถ้าเป็นการแก้ไขและมีไฟล์เดิม ให้ลบไฟล์เก่าทิ้ง
         if (editingDoc?.file_path) {
           await supabase.storage.from(DOCS_BUCKET).remove([editingDoc.file_path])
         }
-
         filePath = path
         fileName = file.name
         fileSize = file.size
       }
+
+      // 2) รูปภาพประจำประกาศ
+      let coverImagePath = editingDoc?.cover_image_path
+      let coverImageName = editingDoc?.cover_image_name
+
+      if (coverFile) {
+        const path = `covers/${safeUploadPath(coverFile.name)}`
+        const { error: uploadError } = await supabase.storage
+          .from(DOCS_BUCKET)
+          .upload(path, coverFile, { cacheControl: '3600', upsert: false })
+        if (uploadError) throw uploadError
+
+        if (editingDoc?.cover_image_path) {
+          await supabase.storage.from(DOCS_BUCKET).remove([editingDoc.cover_image_path])
+        }
+        coverImagePath = path
+        coverImageName = coverFile.name
+      }
+
+      // 3) ลิงก์ใบสมัครพนักงาน
+      let applicationFormPath = editingDoc?.application_form_path
+      let applicationFormName = editingDoc?.application_form_name
+
+      if (appFormMode === 'none') {
+        applicationFormPath = null
+        applicationFormName = null
+      } else if (appFormMode === 'existing') {
+        const picked = allDocuments.find((d) => d.id === appFormDocId)
+        if (picked) {
+          applicationFormPath = picked.file_path
+          applicationFormName = picked.file_name
+        }
+      } else if (appFormMode === 'upload' && appFormFile) {
+        const path = `application-forms/${safeUploadPath(appFormFile.name)}`
+        const { error: uploadError } = await supabase.storage
+          .from(DOCS_BUCKET)
+          .upload(path, appFormFile, { cacheControl: '3600', upsert: false })
+        if (uploadError) throw uploadError
+        applicationFormPath = path
+        applicationFormName = appFormFile.name
+      }
+      // 'keep' → ไม่เปลี่ยนแปลง ใช้ค่าเดิมของ editingDoc ต่อไป
 
       const payload = {
         title: form.title.trim(),
@@ -79,6 +190,10 @@ export default function DocumentFormModal({ open, onClose, onSaved, categories, 
         file_path: filePath,
         file_name: fileName,
         file_size: fileSize,
+        cover_image_path: coverImagePath ?? null,
+        cover_image_name: coverImageName ?? null,
+        application_form_path: applicationFormPath ?? null,
+        application_form_name: applicationFormName ?? null,
       }
 
       if (editingDoc) {
@@ -102,7 +217,7 @@ export default function DocumentFormModal({ open, onClose, onSaved, categories, 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 font-thai">
       <div className="bg-white rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl">
-        <div className="bg-navy-900 text-white px-5 py-4 rounded-t-xl flex items-center justify-between">
+        <div className="bg-navy-900 text-white px-5 py-4 rounded-t-xl flex items-center justify-between sticky top-0 z-10">
           <h2 className="font-semibold">{editingDoc ? 'แก้ไขเอกสาร' : 'อัปโหลดเอกสารใหม่'}</h2>
           <button onClick={onClose} className="text-white/70 hover:text-white text-xl leading-none">
             &times;
@@ -132,11 +247,17 @@ export default function DocumentFormModal({ open, onClose, onSaved, categories, 
                   {main.children.map((sub) => (
                     <option key={sub.id} value={sub.id}>
                       &nbsp;&nbsp;↳ {sub.name}
+                      {sub.requires_cover_image ? ' 🖼️' : ''}
                     </option>
                   ))}
                 </optgroup>
               ))}
             </select>
+            {requiresCover && (
+              <p className="text-xs text-gold-700 bg-gold-50 border border-gold-200 rounded-lg px-3 py-2 mt-2">
+                🖼️ หมวดหมู่นี้ต้องแนบ<strong>รูปภาพประจำประกาศ</strong> — จะแสดงเป็นรูปภาพ/สไลด์บนหน้าแรก
+              </p>
+            )}
           </div>
           <div>
             <label className="block text-sm font-medium text-navy-900 mb-1">รายละเอียด</label>
@@ -170,6 +291,71 @@ export default function DocumentFormModal({ open, onClose, onSaved, categories, 
               <p className="text-xs text-slate-500 mt-1">ไฟล์ปัจจุบัน: {editingDoc.file_name}</p>
             )}
           </div>
+
+          {requiresCover && (
+            <div className="border border-gold-200 bg-gold-50/40 rounded-lg p-3 space-y-2">
+              <label className="block text-sm font-medium text-navy-900">
+                รูปภาพประจำประกาศ * (ไม่เกิน {MAX_COVER_DIMENSION}x{MAX_COVER_DIMENSION} px)
+              </label>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => setCoverFile(e.target.files?.[0] ?? null)}
+                className="w-full text-sm border border-slate-300 rounded-lg px-3 py-2 bg-white"
+              />
+              {editingDoc?.cover_image_name && (
+                <p className="text-xs text-slate-500">รูปปัจจุบัน: {editingDoc.cover_image_name}</p>
+              )}
+              <p className="text-xs text-slate-500">
+                ถ้ารูปมีขนาดใหญ่กว่าที่กำหนด ระบบจะแจ้งเตือนและไม่บันทึกไฟล์ ให้ย่อขนาดก่อนอัปโหลดใหม่
+              </p>
+            </div>
+          )}
+
+          <div className="border border-slate-200 rounded-lg p-3 space-y-2">
+            <label className="block text-sm font-medium text-navy-900">
+              ลิงก์ใบสมัครพนักงาน (แสดงท้ายประกาศ — ไม่บังคับ)
+            </label>
+            <select
+              value={appFormMode}
+              onChange={(e) => setAppFormMode(e.target.value)}
+              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gold-500"
+            >
+              <option value="keep">
+                {editingDoc?.application_form_name
+                  ? `ใช้ไฟล์เดิม: ${editingDoc.application_form_name}`
+                  : 'ไม่แนบใบสมัคร'}
+              </option>
+              <option value="existing">เลือกจากเอกสารที่มีอยู่แล้วในระบบ</option>
+              <option value="upload">อัปโหลดไฟล์ใบสมัครใหม่</option>
+              {editingDoc?.application_form_name && <option value="none">ลบลิงก์ใบสมัครออก</option>}
+            </select>
+
+            {appFormMode === 'existing' && (
+              <select
+                value={appFormDocId}
+                onChange={(e) => setAppFormDocId(e.target.value)}
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
+              >
+                <option value="">-- เลือกเอกสาร --</option>
+                {otherDocuments.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.title} ({d.file_name})
+                  </option>
+                ))}
+              </select>
+            )}
+
+            {appFormMode === 'upload' && (
+              <input
+                type="file"
+                accept=".pdf,.doc,.docx"
+                onChange={(e) => setAppFormFile(e.target.files?.[0] ?? null)}
+                className="w-full text-sm border border-slate-300 rounded-lg px-3 py-2"
+              />
+            )}
+          </div>
+
           <label className="flex items-center gap-2 text-sm text-navy-900">
             <input
               type="checkbox"

@@ -17,6 +17,7 @@ function slugify(text) {
 export default function CategoryManagerModal({ open, onClose, categories, onChanged }) {
   const [newName, setNewName] = useState('')
   const [newParentId, setNewParentId] = useState('')
+  const [newRequiresCover, setNewRequiresCover] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [editingName, setEditingName] = useState('')
   const [saving, setSaving] = useState(false)
@@ -34,6 +35,7 @@ export default function CategoryManagerModal({ open, onClose, categories, onChan
       name: newName.trim(),
       slug: slugify(newName),
       parent_id: newParentId || null,
+      requires_cover_image: newRequiresCover,
       sort_order: categories.length + 1,
     })
     setSaving(false)
@@ -43,6 +45,7 @@ export default function CategoryManagerModal({ open, onClose, categories, onChan
     }
     setNewName('')
     setNewParentId('')
+    setNewRequiresCover(false)
     onChanged()
   }
 
@@ -57,6 +60,18 @@ export default function CategoryManagerModal({ open, onClose, categories, onChan
       return
     }
     setEditingId(null)
+    onChanged()
+  }
+
+  async function handleToggleCover(cat) {
+    const { error } = await supabase
+      .from('categories')
+      .update({ requires_cover_image: !cat.requires_cover_image })
+      .eq('id', cat.id)
+    if (error) {
+      Swal.fire({ icon: 'error', title: 'อัปเดตไม่สำเร็จ', text: error.message })
+      return
+    }
     onChanged()
   }
 
@@ -105,6 +120,17 @@ export default function CategoryManagerModal({ open, onClose, categories, onChan
             <span className={`flex-1 ${isSub ? 'text-slate-700' : 'text-navy-900 font-medium'}`}>
               {cat.name}
             </span>
+            <button
+              onClick={() => handleToggleCover(cat)}
+              title="บังคับแนบรูปภาพประจำประกาศ (แสดงเป็นสไลด์/รูปภาพบนหน้าแรก)"
+              className={`text-xs px-2 py-0.5 rounded-full border ${
+                cat.requires_cover_image
+                  ? 'bg-gold-50 text-gold-700 border-gold-300'
+                  : 'bg-slate-50 text-slate-400 border-slate-200'
+              }`}
+            >
+              🖼️ {cat.requires_cover_image ? 'ต้องมีรูปปก' : 'ไม่บังคับรูปปก'}
+            </button>
             <button
               onClick={() => {
                 setEditingId(cat.id)
@@ -166,6 +192,14 @@ export default function CategoryManagerModal({ open, onClose, categories, onChan
                 </option>
               ))}
             </select>
+            <label className="flex items-center gap-2 text-xs text-navy-800">
+              <input
+                type="checkbox"
+                checked={newRequiresCover}
+                onChange={(e) => setNewRequiresCover(e.target.checked)}
+              />
+              หมวดหมู่นี้ต้องแนบรูปภาพประจำประกาศ (เช่น ประกาศรับสมัครพนักงาน) — จะแสดงเป็นรูปภาพ/สไลด์บนหน้าแรก
+            </label>
           </form>
 
           <ul className="divide-y divide-slate-100 border border-slate-100 rounded-lg overflow-hidden">

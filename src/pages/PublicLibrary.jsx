@@ -3,6 +3,9 @@ import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import DocumentCard from '../components/DocumentCard.jsx'
 import DocumentListItem from '../components/DocumentListItem.jsx'
+import AnnouncementCard from '../components/AnnouncementCard.jsx'
+import AnnouncementSlideshow from '../components/AnnouncementSlideshow.jsx'
+import AnnouncementDetailModal from '../components/AnnouncementDetailModal.jsx'
 import CategoryTabBar from '../components/CategoryTabBar.jsx'
 import { buildCategoryTree, categoryAndDescendantIds, categoryPathLabel } from '../lib/categoryTree.js'
 
@@ -14,6 +17,7 @@ export default function PublicLibrary() {
   const [search, setSearch] = useState('')
   const [showSearch, setShowSearch] = useState(false)
   const [viewMode, setViewMode] = useState('grid') // 'grid' | 'list'
+  const [selectedAnnouncement, setSelectedAnnouncement] = useState(null)
 
   // null = ยังไม่ได้เลือกอะไร (แสดงหน้าต้อนรับ), 'all' = แสดงทั้งหมด, หรือ id ของหมวดหมู่หลัก
   const [activeMainId, setActiveMainId] = useState(null)
@@ -40,6 +44,16 @@ export default function PublicLibrary() {
 
   const tree = useMemo(() => buildCategoryTree(categories), [categories])
 
+  // id ของหมวดหมู่ (หลัก+ย่อย) ที่ตั้งค่า requires_cover_image = true
+  const coverCategoryIds = useMemo(
+    () => new Set(categories.filter((c) => c.requires_cover_image).map((c) => c.id)),
+    [categories]
+  )
+  const isAnnouncement = (doc) => coverCategoryIds.has(doc.category_id) && !!doc.cover_image_path
+
+  // เอกสารประกาศรับสมัครทั้งหมด (ใช้ทำสไลด์บนหน้าแรก แสดงเสมอไม่ว่าจะกรองอะไรอยู่)
+  const announcementDocs = useMemo(() => documents.filter(isAnnouncement), [documents, coverCategoryIds])
+
   function handleSelectMain(id) {
     setActiveMainId(id)
     setActiveSubId('all')
@@ -63,6 +77,9 @@ export default function PublicLibrary() {
       return haystack.includes(q)
     })
   }, [documents, categories, search, activeMainId, activeSubId])
+
+  const filteredAnnouncements = filtered.filter(isAnnouncement)
+  const filteredNormal = filtered.filter((d) => !isAnnouncement(d))
 
   function handleDownloaded(docId, newCount) {
     setDocuments((prev) => prev.map((d) => (d.id === docId ? { ...d, download_count: newCount } : d)))
@@ -114,12 +131,17 @@ export default function PublicLibrary() {
         onSelectSub={setActiveSubId}
       />
 
+      {/* ประกาศรับสมัครพนักงาน — สไลด์รูปภาพ แสดงบนหน้าแรกเสมอเมื่อมีประกาศ */}
+      {!loading && announcementDocs.length > 0 && (
+        <AnnouncementSlideshow documents={announcementDocs} onSelect={setSelectedAnnouncement} />
+      )}
+
       <main className="max-w-6xl mx-auto px-4 py-8">
         {loading ? (
           <div className="text-center py-24 text-slate-400">กำลังโหลดเอกสาร...</div>
         ) : !hasFilter ? (
           /* Welcome hero */
-          <div className="flex flex-col items-center justify-center text-center py-20 sm:py-28 gap-4">
+          <div className="flex flex-col items-center justify-center text-center py-16 sm:py-24 gap-4">
             <div className="w-20 h-20 rounded-full bg-gradient-to-br from-gold-400 to-gold-600 flex items-center justify-center text-4xl shadow-md">
               📚
             </div>
@@ -140,63 +162,82 @@ export default function PublicLibrary() {
         ) : filtered.length === 0 ? (
           <div className="text-center py-24 text-slate-400">ไม่พบเอกสารที่ตรงกับการค้นหา</div>
         ) : (
-          <>
-            <div className="flex items-center justify-between mb-4">
-              <p className="text-sm text-slate-500">
-                พบ <span className="text-navy-900 font-medium">{filtered.length.toLocaleString('th-TH')}</span> เอกสาร
-              </p>
-              <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-full p-1">
-                <button
-                  onClick={() => setViewMode('grid')}
-                  aria-label="มุมมองแบบตาราง"
-                  title="มุมมองแบบตาราง"
-                  className={`w-8 h-8 rounded-full flex items-center justify-center text-sm transition-colors ${
-                    viewMode === 'grid'
-                      ? 'bg-gradient-to-r from-gold-500 to-gold-600 text-navy-950'
-                      : 'text-slate-400 hover:text-gold-600'
-                  }`}
-                >
-                  ▦
-                </button>
-                <button
-                  onClick={() => setViewMode('list')}
-                  aria-label="มุมมองแบบรายการ"
-                  title="มุมมองแบบรายการ"
-                  className={`w-8 h-8 rounded-full flex items-center justify-center text-sm transition-colors ${
-                    viewMode === 'list'
-                      ? 'bg-gradient-to-r from-gold-500 to-gold-600 text-navy-950'
-                      : 'text-slate-400 hover:text-gold-600'
-                  }`}
-                >
-                  ☰
-                </button>
-              </div>
-            </div>
-
-            {viewMode === 'grid' ? (
-              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {filtered.map((doc) => (
-                  <DocumentCard
-                    key={doc.id}
-                    doc={doc}
-                    categoryLabel={categoryPathLabel(categories, doc.category_id)}
-                    onDownloaded={handleDownloaded}
-                  />
-                ))}
-              </div>
-            ) : (
-              <div className="flex flex-col gap-3">
-                {filtered.map((doc) => (
-                  <DocumentListItem
-                    key={doc.id}
-                    doc={doc}
-                    categoryLabel={categoryPathLabel(categories, doc.category_id)}
-                    onDownloaded={handleDownloaded}
-                  />
-                ))}
+          <div className="space-y-8">
+            {/* เอกสารประเภทประกาศ (มีรูปภาพ) ของหมวดหมู่ที่กำลังดูอยู่ — แสดงเป็นรูปภาพเสมอ */}
+            {filteredAnnouncements.length > 0 && (
+              <div>
+                <p className="text-sm text-slate-500 mb-3">
+                  ประกาศ (<span className="text-navy-900 font-medium">{filteredAnnouncements.length}</span>)
+                </p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                  {filteredAnnouncements.map((doc) => (
+                    <AnnouncementCard key={doc.id} doc={doc} onOpen={setSelectedAnnouncement} />
+                  ))}
+                </div>
               </div>
             )}
-          </>
+
+            {/* เอกสารทั่วไป */}
+            {filteredNormal.length > 0 && (
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-sm text-slate-500">
+                    เอกสาร (<span className="text-navy-900 font-medium">{filteredNormal.length}</span>)
+                  </p>
+                  <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-full p-1">
+                    <button
+                      onClick={() => setViewMode('grid')}
+                      aria-label="มุมมองแบบตาราง"
+                      title="มุมมองแบบตาราง"
+                      className={`w-8 h-8 rounded-full flex items-center justify-center text-sm transition-colors ${
+                        viewMode === 'grid'
+                          ? 'bg-gradient-to-r from-gold-500 to-gold-600 text-navy-950'
+                          : 'text-slate-400 hover:text-gold-600'
+                      }`}
+                    >
+                      ▦
+                    </button>
+                    <button
+                      onClick={() => setViewMode('list')}
+                      aria-label="มุมมองแบบรายการ"
+                      title="มุมมองแบบรายการ"
+                      className={`w-8 h-8 rounded-full flex items-center justify-center text-sm transition-colors ${
+                        viewMode === 'list'
+                          ? 'bg-gradient-to-r from-gold-500 to-gold-600 text-navy-950'
+                          : 'text-slate-400 hover:text-gold-600'
+                      }`}
+                    >
+                      ☰
+                    </button>
+                  </div>
+                </div>
+
+                {viewMode === 'grid' ? (
+                  <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {filteredNormal.map((doc) => (
+                      <DocumentCard
+                        key={doc.id}
+                        doc={doc}
+                        categoryLabel={categoryPathLabel(categories, doc.category_id)}
+                        onDownloaded={handleDownloaded}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-3">
+                    {filteredNormal.map((doc) => (
+                      <DocumentListItem
+                        key={doc.id}
+                        doc={doc}
+                        categoryLabel={categoryPathLabel(categories, doc.category_id)}
+                        onDownloaded={handleDownloaded}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         )}
       </main>
 
@@ -209,6 +250,10 @@ export default function PublicLibrary() {
       >
         ⚙️
       </Link>
+
+      {selectedAnnouncement && (
+        <AnnouncementDetailModal doc={selectedAnnouncement} onClose={() => setSelectedAnnouncement(null)} />
+      )}
     </div>
   )
 }

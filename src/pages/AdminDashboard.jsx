@@ -132,6 +132,7 @@ export default function AdminDashboard() {
         onSaved={loadAll}
         categories={categories}
         editingDoc={editingDoc}
+        allDocuments={documents}
       />
       <CategoryManagerModal
         open={showCategoryModal}

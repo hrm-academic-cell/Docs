@@ -17,6 +17,7 @@ create table if not exists public.categories (
   name         text not null unique,        -- ชื่อหมวดหมู่ เช่น "ประกาศ / คำสั่ง"
   slug         text not null unique,        -- ใช้สำหรับ filter ใน URL เช่น announcement
   parent_id    uuid references public.categories(id) on delete cascade, -- null = หมวดหมู่หลัก
+  requires_cover_image boolean not null default false, -- true = บังคับแนบรูปภาพประจำประกาศ (เช่น ประกาศรับสมัครงาน)
   sort_order   int not null default 0,
   created_at   timestamptz not null default now()
 );
@@ -37,6 +38,10 @@ create table if not exists public.documents (
   file_size       bigint default 0,               -- bytes
   download_count  bigint not null default 0,
   is_published    boolean not null default true,
+  cover_image_path      text,      -- รูปภาพประจำประกาศ (สำหรับหมวดหมู่ที่ requires_cover_image = true)
+  cover_image_name      text,
+  application_form_path text,      -- ลิงก์ใบสมัครพนักงานแนบท้ายประกาศ (ถ้ามี)
+  application_form_name text,
   created_by      uuid references auth.users(id),
   created_at      timestamptz not null default now(),
   updated_at      timestamptz not null default now()
