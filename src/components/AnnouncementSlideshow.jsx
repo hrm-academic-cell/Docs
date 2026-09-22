@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { getPublicFileUrl } from '../lib/supabaseClient'
 
-export default function AnnouncementSlideshow({ documents, onSelect }) {
+export default function AnnouncementSlideshow({ documents }) {
   const [index, setIndex] = useState(0)
 
   useEffect(() => {
@@ -35,19 +36,15 @@ export default function AnnouncementSlideshow({ documents, onSelect }) {
         </div>
 
         <div className="relative rounded-2xl overflow-hidden bg-slate-100 border border-slate-200 group">
-          <button
-            onClick={() => onSelect(current)}
-            className="block w-full"
-            aria-label={`เปิดประกาศ: ${current.title}`}
-          >
+          <Link to={`/announcement/${current.id}`} className="block w-full" aria-label={`เปิดประกาศ: ${current.title}`}>
             <img
               src={getPublicFileUrl(current.cover_image_path)}
               alt={current.title}
               className="w-full max-h-[420px] object-contain bg-white mx-auto transition-opacity duration-300"
             />
-          </button>
+          </Link>
 
-          <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-navy-950/80 to-transparent px-4 py-3">
+          <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-navy-950/80 to-transparent px-4 py-3 pointer-events-none">
             <p className="text-white text-sm font-medium truncate">{current.title}</p>
           </div>
 

@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './hooks/useAuth.jsx'
 import PublicLibrary from './pages/PublicLibrary.jsx'
+import AnnouncementDetail from './pages/AnnouncementDetail.jsx'
 import AdminLogin from './pages/AdminLogin.jsx'
 import AdminDashboard from './pages/AdminDashboard.jsx'
 
@@ -32,6 +33,7 @@ export default function App() {
     <AuthProvider>
       <Routes>
         <Route path="/" element={<PublicLibrary />} />
+        <Route path="/announcement/:id" element={<AnnouncementDetail />} />
         <Route path="/admin/login" element={<AdminLogin />} />
         <Route
           path="/admin"

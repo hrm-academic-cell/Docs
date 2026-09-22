@@ -5,7 +5,6 @@ import DocumentCard from '../components/DocumentCard.jsx'
 import DocumentListItem from '../components/DocumentListItem.jsx'
 import AnnouncementCard from '../components/AnnouncementCard.jsx'
 import AnnouncementSlideshow from '../components/AnnouncementSlideshow.jsx'
-import AnnouncementDetailModal from '../components/AnnouncementDetailModal.jsx'
 import CategoryTabBar from '../components/CategoryTabBar.jsx'
 import { buildCategoryTree, categoryAndDescendantIds, categoryPathLabel } from '../lib/categoryTree.js'
 
@@ -17,7 +16,6 @@ export default function PublicLibrary() {
   const [search, setSearch] = useState('')
   const [showSearch, setShowSearch] = useState(false)
   const [viewMode, setViewMode] = useState('grid') // 'grid' | 'list'
-  const [selectedAnnouncement, setSelectedAnnouncement] = useState(null)
 
   // null = ยังไม่ได้เลือกอะไร (แสดงหน้าต้อนรับ), 'all' = แสดงทั้งหมด, หรือ id ของหมวดหมู่หลัก
   const [activeMainId, setActiveMainId] = useState(null)
@@ -133,7 +131,7 @@ export default function PublicLibrary() {
 
       {/* ประกาศรับสมัครพนักงาน — สไลด์รูปภาพ แสดงบนหน้าแรกเสมอเมื่อมีประกาศ */}
       {!loading && announcementDocs.length > 0 && (
-        <AnnouncementSlideshow documents={announcementDocs} onSelect={setSelectedAnnouncement} />
+        <AnnouncementSlideshow documents={announcementDocs} />
       )}
 
       <main className="max-w-6xl mx-auto px-4 py-8">
@@ -171,7 +169,7 @@ export default function PublicLibrary() {
                 </p>
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
                   {filteredAnnouncements.map((doc) => (
-                    <AnnouncementCard key={doc.id} doc={doc} onOpen={setSelectedAnnouncement} />
+                    <AnnouncementCard key={doc.id} doc={doc} />
                   ))}
                 </div>
               </div>
@@ -250,10 +248,6 @@ export default function PublicLibrary() {
       >
         ⚙️
       </Link>
-
-      {selectedAnnouncement && (
-        <AnnouncementDetailModal doc={selectedAnnouncement} onClose={() => setSelectedAnnouncement(null)} />
-      )}
     </div>
   )
 }
